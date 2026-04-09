@@ -49,6 +49,11 @@ type CachableInput = Record<string, unknown> & CacheInputExtension;
  * with a known `cacheKey` by returning the cached response when available,
  * and populating the cache with the live response on a miss.
  *
+ * Concurrent requests that share the same `cacheKey` are deduplicated: only
+ * the first in-flight request reaches the HTTP handler; all subsequent
+ * callers with the same key attach to the same pending promise and receive
+ * the same result without making additional network calls.
+ *
  * Attach the result to an SDK client via `client.middlewareStack.use(...)`.
  *
  * @example
@@ -75,6 +80,16 @@ export function createCachingMiddleware<
   const { store, onHit, onMiss } = options;
 
   /**
+   * In-flight request map.
+   *
+   * When a cache miss triggers a live request, the resulting promise is stored
+   * here under the cacheKey. Any concurrent request for the same key finds
+   * this promise and awaits it directly instead of making a second HTTP call.
+   * The entry is removed as soon as the promise settles (success or error).
+   */
+  const inFlight = new Map<string, Promise<InitializeHandlerOutput<V>>>();
+
+  /**
    * The actual middleware function.
    * It satisfies the `InitializeMiddleware<Input, Output>` signature expected
    * by the SDK's middleware stack.
@@ -99,19 +114,32 @@ export function createCachingMiddleware<
         return { output: cached, response: undefined as unknown };
       }
 
-      // --- cache miss ---
+      // --- deduplicate concurrent misses ---
+      // If another request with the same key is already in-flight, attach to
+      // its promise rather than firing a second HTTP call.
+      const pending = inFlight.get(cacheKey);
+      if (pending !== undefined) {
+        return pending;
+      }
+
+      // --- cache miss: own the in-flight request ---
       onMiss?.(cacheKey);
 
       // Strip `cacheKey` before forwarding so downstream handlers receive a
       // clean input that matches the original command's expected shape.
-      const result = await next({
+      const request = next({
         ...args,
         input: forwardedInput as CachableInput,
+      }).then(async (result) => {
+        await store.set(cacheKey, result.output);
+        return result;
+      }).finally(() => {
+        inFlight.delete(cacheKey);
       });
 
-      await store.set(cacheKey, result.output);
+      inFlight.set(cacheKey, request);
 
-      return result;
+      return request;
     };
 
   return {

@@ -375,4 +375,78 @@ describe("createCachingMiddleware", () => {
       expect(handler.handle).toHaveBeenCalledTimes(1);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Concurrent requests with the same cacheKey — deduplication
+  // -------------------------------------------------------------------------
+  describe("concurrent requests with the same cacheKey", () => {
+    it("only calls the HTTP handler once when two sends are in-flight simultaneously", async () => {
+      const _map = new Map<string, GetObjectCommandOutput>();
+      const deferredStore: CacheStore<GetObjectCommandOutput> = {
+        get: (key) => Promise.resolve(_map.get(key)),
+        set: (key, value) => { _map.set(key, value); },
+      };
+
+      // Only one response queued — a second HTTP call would throw.
+      const handler = makeFakeHandler([makeS3Response("response-1")]);
+
+      const client = new S3Client({
+        region: "us-east-1",
+        credentials: { accessKeyId: "FAKE", secretAccessKey: "FAKE" },
+        requestHandler: handler as unknown as never,
+      });
+      client.middlewareStack.use(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        createCachingMiddleware<GetObjectCommandOutput>({ store: deferredStore }) as unknown as Pluggable<any, any>
+      );
+
+      const input = {
+        Bucket: "b", Key: "k", cacheKey: "race-key",
+      } as GetObjectCommandInput & CacheInputExtension;
+
+      // Fire both sends concurrently — the second must attach to the
+      // in-flight promise rather than making its own HTTP call.
+      const [result1, result2] = await Promise.all([
+        client.send(new GetObjectCommand(input)),
+        client.send(new GetObjectCommand(input)),
+      ]);
+
+      expect(handler.handle).toHaveBeenCalledTimes(1);
+      // Both callers receive the same response object.
+      expect(result1).toBe(result2);
+    });
+
+    it("calls onMiss only once for concurrent requests sharing a cacheKey", async () => {
+      const _map = new Map<string, GetObjectCommandOutput>();
+      const deferredStore: CacheStore<GetObjectCommandOutput> = {
+        get: (key) => Promise.resolve(_map.get(key)),
+        set: (key, value) => { _map.set(key, value); },
+      };
+
+      const handler = makeFakeHandler([makeS3Response("data")]);
+      const onMiss = jest.fn();
+
+      const client = new S3Client({
+        region: "us-east-1",
+        credentials: { accessKeyId: "FAKE", secretAccessKey: "FAKE" },
+        requestHandler: handler as unknown as never,
+      });
+      client.middlewareStack.use(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        createCachingMiddleware<GetObjectCommandOutput>({ store: deferredStore, onMiss }) as unknown as Pluggable<any, any>
+      );
+
+      const input = {
+        Bucket: "b", Key: "k", cacheKey: "race-key",
+      } as GetObjectCommandInput & CacheInputExtension;
+
+      await Promise.all([
+        client.send(new GetObjectCommand(input)),
+        client.send(new GetObjectCommand(input)),
+        client.send(new GetObjectCommand(input)),
+      ]);
+
+      expect(onMiss).toHaveBeenCalledTimes(1);
+    });
+  });
 });
