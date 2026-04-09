@@ -1,4 +1,4 @@
-# cache_middleware
+# aws-sdk-cache-middleware
 
 A TypeScript library that adds response caching to AWS SDK v3 clients via the SDK's built-in middleware stack. Attach it once to any client and opt individual commands into caching by providing a `cacheKey` on the command input.
 
@@ -14,7 +14,7 @@ A TypeScript library that adds response caching to AWS SDK v3 clients via the SD
 ## Installation
 
 ```sh
-npm install cache_middleware
+npm i aws-sdk-cache-middleware
 ```
 
 ## Quick Start
@@ -22,8 +22,8 @@ npm install cache_middleware
 ```ts
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import type { GetObjectCommandOutput } from "@aws-sdk/client-s3";
-import { createCachingMiddleware } from "cache_middleware";
-import type { CacheInputExtension } from "cache_middleware";
+import { createCachingMiddleware } from "aws-sdk-cache-middleware";
+import type { CacheInputExtension } from "aws-sdk-cache-middleware";
 
 // 1. Create any store that satisfies CacheStore<V> — a plain Map works fine
 const cache = new Map<string, GetObjectCommandOutput>();
@@ -101,7 +101,7 @@ interface CacheInputExtension {
 A constructor type helper for casting existing SDK command classes so TypeScript accepts `cacheKey` natively without an inline cast:
 
 ```ts
-import type { CachableCommand } from "cache_middleware";
+import type { CachableCommand } from "aws-sdk-cache-middleware";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import type { GetObjectCommandInput, GetObjectCommandOutput } from "@aws-sdk/client-s3";
 
@@ -122,7 +122,7 @@ const cmd = new CachableGetObjectCommand({
 import { createClient } from "redis";
 import { S3Client } from "@aws-sdk/client-s3";
 import type { GetObjectCommandOutput } from "@aws-sdk/client-s3";
-import { createCachingMiddleware } from "cache_middleware";
+import { createCachingMiddleware } from "aws-sdk-cache-middleware";
 
 const redis = createClient();
 await redis.connect();

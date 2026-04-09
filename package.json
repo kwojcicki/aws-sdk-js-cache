@@ -1,6 +1,6 @@
 {
-  "name": "aws-cache-middleware",
-  "version": "1.0.0",
+  "name": "aws-sdk-cache-middleware",
+  "version": "1.0.1",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -12,13 +12,19 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "testMatch": ["**/__tests__/**/*.test.ts"],
-    "moduleFileExtensions": ["ts", "js", "json"]
+    "testMatch": [
+      "**/__tests__/**/*.test.ts"
+    ],
+    "moduleFileExtensions": [
+      "ts",
+      "js",
+      "json"
+    ]
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "A TypeScript library that adds response caching to AWS SDK v3 clients via the SDK's built-in middleware stack. Attach it once to any client and opt individual commands into caching by providing a `cacheKey` on the command input.",
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1024.0",
     "@smithy/node-http-handler": "^4.5.1",
